@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(FEAST VERSION 3.0 LANGUAGES C Fortran)
 
-
 option(FEAST_BUILD_EXAMPLES "Set to ON to build FEAST's examples" OFF)
-find_package(LAPACK)
+
+
+find_package(LAPACK REQUIRED)
 
 
 # copy source to build directory and configure FEAST's build system
@@ -31,27 +32,25 @@ add_custom_target(build_feast
     WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/src")
 
 # expose built libraries as targets
-add_library(FEAST::FEAST STATIC IMPORTED)
-add_dependencies(FEAST::FEAST build_targets)
-set_target_properties(FEAST::FEAST PROPERTIES
+add_library(feast STATIC IMPORTED GLOBAL)
+add_dependencies(feast build_feast)
+set_target_properties(feast PROPERTIES
     IMPORTED_LINK_INTERFACE_LANGUAGES Fortran
     IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/lib/libfeast.a
-    INTERFACE_INCLUDE_DIRECTORIES ${PROJECT_SOURCE_DIR}/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${PROJECT_SOURCE_DIR}/include
+    INTERFACE_LINK_LIBRARIES "${LAPACK_LIBRARIES}")
 
 function(add_feast_library name)
-    add_library(FEAST::${name} STATIC IMPORTED)
-    add_dependencies(FEAST::${name} build_targets)
-    set_target_properties(FEAST::${name} PROPERTIES
+    add_library(feast_${name} STATIC IMPORTED GLOBAL)
+    add_dependencies(feast_${name} build_feast)
+    set_target_properties(feast_${name} PROPERTIES
         IMPORTED_LINK_INTERFACE_LANGUAGES Fortran
         IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/lib/libfeast_${name}.a
         INTERFACE_INCLUDE_DIRECTORIES ${PROJECT_SOURCE_DIR}/include)
-    target_link_libraries(FEAST::${name} INTERFACE FEAST::FEAST)
+    target_link_libraries(feast_${name} INTERFACE feast)
 endfunction()
 
 add_feast_library(dense)
-if(LAPACK_FOUND)
-    target_link_libraries(FEAST::dense INTERFACE ${LAPACK_LIBRARIES})
-endif()
 add_feast_library(sparse)
 add_feast_library(banded)
 
@@ -67,24 +66,22 @@ if(FEAST_BUILD_EXAMPLES)
     file(COPY ${PROJECT_SOURCE_DIR}/example/Non-Hermitian/system4
          DESTINATION ${PROJECT_BINARY_DIR})
 
-    if(LAPACK_FOUND)
-        function(add_dense_example type name)
-            add_executable(${name}
-                example/${type}/C/1_dense/${name}.c)
-            set_target_properties(${name} PROPERTIES
-                RUNTIME_OUTPUT_DIRECTORY C/1_dense)
-            add_dependencies(${name} build_feast)
-            target_link_libraries(${name} PRIVATE FEAST::dense)
-        endfunction()
+    function(add_dense_example type name)
+        add_executable(${name}
+            example/${type}/C/1_dense/${name}.c)
+        set_target_properties(${name} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY C/1_dense)
+        add_dependencies(${name} build_feast)
+        target_link_libraries(${name} PRIVATE feast_dense)
+    endfunction()
 
-        add_dense_example(Hermitian helloworld)
-        add_dense_example(Hermitian driver_zfeast_heev)
-        add_dense_example(Hermitian driver_cfeast_heev)
-        add_dense_example(Hermitian driver_dfeast_sygv)
-        add_dense_example(Hermitian driver_sfeast_sygv)
+    add_dense_example(Hermitian helloworld)
+    add_dense_example(Hermitian driver_zfeast_heev)
+    add_dense_example(Hermitian driver_cfeast_heev)
+    add_dense_example(Hermitian driver_dfeast_sygv)
+    add_dense_example(Hermitian driver_sfeast_sygv)
 
-        add_dense_example(Non-Hermitian driver_dfeast_gegv)
-        add_dense_example(Non-Hermitian driver_zfeast_syev)
-        add_dense_example(Non-Hermitian driver_zfeast_syevx)
-    endif()
+    add_dense_example(Non-Hermitian driver_dfeast_gegv)
+    add_dense_example(Non-Hermitian driver_zfeast_syev)
+    add_dense_example(Non-Hermitian driver_zfeast_syevx)
 endif()
